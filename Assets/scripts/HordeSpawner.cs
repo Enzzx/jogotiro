@@ -14,6 +14,8 @@ public class HordeSpawner : MonoBehaviour
     public float timeBetweenWaves = 12f;
     public float spawnRadiusMin = 45f; // Distancia minima do player (escondido no fog)
     public float spawnRadiusMax = 65f; // Distancia maxima (dentro dos 80m de visao)
+    [Tooltip("Limite de inimigos vivos ao mesmo tempo (protege a performance).")]
+    public int maxAliveEnemies = 20;
 
     private int currentWave = 0;
 
@@ -41,12 +43,19 @@ public class HordeSpawner : MonoBehaviour
 
             for (int i = 0; i < countToSpawn; i++)
             {
+                if (CountAliveEnemies() >= maxAliveEnemies) break;
+
                 SpawnSingleEnemy();
                 yield return new WaitForSeconds(0.4f); // Espacamento leve entre cada spawn
             }
 
             yield return new WaitForSeconds(timeBetweenWaves);
         }
+    }
+
+    int CountAliveEnemies()
+    {
+        return FindObjectsByType<EnemyAI>(FindObjectsInactive.Exclude).Length;
     }
 
     void SpawnSingleEnemy()

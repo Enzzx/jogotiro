@@ -33,6 +33,9 @@ public class DayNightTransition : MonoBehaviour
 
     private float elapsedTime = 0f;
 
+    // 0 = noite, 1 = dia. Usado por outros sistemas (ex.: escurecer inimigos).
+    public static float DayFactor { get; private set; } = 0f;
+
     void Start()
     {
         RenderSettings.fog = true;
@@ -52,6 +55,8 @@ public class DayNightTransition : MonoBehaviour
 
     void ApplyAtmosphere(float t)
     {
+        DayFactor = Mathf.Clamp01(t);
+
         Color currentFogColor = Color.Lerp(nightFogColor, dayFogColor, t);
         RenderSettings.fogColor = currentFogColor;
 
