@@ -50,6 +50,13 @@ public class EnemyAI : MonoBehaviour
     public float renderDistance = 45f;
     public float renderCheckInterval = 0.5f;
 
+    [Header("Ajuste ao Chao")]
+    [Tooltip("Cola os pes do inimigo no terreno, mesmo se o NavMesh estiver alguns metros fora de lugar.")]
+    public bool alignToGround = true;
+    [Tooltip("Altura do root do inimigo acima do terreno (os pes do modelo ficam um pouco abaixo).")]
+    public float groundOffset = 0.9f;
+    public float groundCheckInterval = 0.5f;
+
     private bool isAggro = false;
     private bool isDancing = false;
     private float nextSightCheck;
@@ -61,6 +68,7 @@ public class EnemyAI : MonoBehaviour
     private GameObject currentModel;
     private bool modelRenderersEnabled = true;
     private EnemyNightShade nightShade;
+    private float nextGroundCheck;
     private readonly RaycastHit[] lineOfSightHits = new RaycastHit[8];
 
     void Start()
@@ -79,6 +87,9 @@ public class EnemyAI : MonoBehaviour
 
         if (agent != null)
             agent.speed = wanderSpeed;
+
+        nextGroundCheck = Time.time + groundCheckInterval;
+        AlignToGround();
 
         // Cada inimigo checa a visao em um instante diferente, para distribuir o custo.
         nextSightCheck = Time.time + Random.Range(0f, sightCheckInterval);
@@ -103,6 +114,13 @@ public class EnemyAI : MonoBehaviour
     void Update()
     {
         if (isStopped || playerTransform == null) return;
+
+        // Mantem os pes no chao mesmo se a malha de navegacao estiver desalinhada.
+        if (alignToGround && Time.time >= nextGroundCheck)
+        {
+            nextGroundCheck = Time.time + groundCheckInterval;
+            AlignToGround();
+        }
 
         // Esconde o corpo do inimigo quando ele esta longe demais (a neblina ja esconde).
         if (Time.time >= nextRenderCheck)
@@ -265,6 +283,29 @@ public class EnemyAI : MonoBehaviour
             float speedFactor = Mathf.Clamp(agent.velocity.magnitude / 3.2f, 0.55f, 1.6f);
             currentAnimator.SetFloat("RunSpeed", speedFactor);
         }
+    }
+
+    public void SnapToGround()
+    {
+        if (agent == null) agent = GetComponent<NavMeshAgent>();
+        AlignToGround();
+    }
+
+    // Reposiciona o corpo do inimigo na altura do terreno usando o baseOffset do agente.
+    void AlignToGround()
+    {
+        if (!alignToGround || agent == null || !agent.isOnNavMesh) return;
+
+        Terrain terrain = Terrain.activeTerrain;
+        if (terrain == null) return;
+
+        Vector3 pos = transform.position;
+        float terrainY = terrain.SampleHeight(pos);
+        float navMeshY = pos.y - agent.baseOffset;
+        float desiredOffset = terrainY + groundOffset - navMeshY;
+
+        if (Mathf.Abs(agent.baseOffset - desiredOffset) > 0.01f)
+            agent.baseOffset = Mathf.Clamp(desiredOffset, -50f, 50f);
     }
 
     void Wander()

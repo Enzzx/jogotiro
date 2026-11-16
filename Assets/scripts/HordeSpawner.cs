@@ -67,10 +67,18 @@ public class HordeSpawner : MonoBehaviour
         float randomDistance = Random.Range(spawnRadiusMin, spawnRadiusMax);
         Vector3 candidatePosition = playerTransform.position + new Vector3(randomDir.x, 0f, randomDir.y) * randomDistance;
 
+        // Usa a altura do terreno como referencia para achar o NavMesh certo
+        // (evita cair em pedacos de malha que estao acima ou abaixo do chao).
+        Terrain terrain = Terrain.activeTerrain;
+        if (terrain != null)
+            candidatePosition.y = terrain.SampleHeight(candidatePosition);
+
         // Encontra o ponto valido mais proximo na malha de navegacao (NavMesh) do terreno
-        if (NavMesh.SamplePosition(candidatePosition, out NavMeshHit hit, 15f, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(candidatePosition, out NavMeshHit hit, 10f, NavMesh.AllAreas))
         {
-            Instantiate(enemyPrefab, hit.position, Quaternion.identity);
+            GameObject enemy = Instantiate(enemyPrefab, hit.position, Quaternion.identity);
+            EnemyAI enemyAI = enemy.GetComponent<EnemyAI>();
+            if (enemyAI != null) enemyAI.SnapToGround();
         }
     }
 }

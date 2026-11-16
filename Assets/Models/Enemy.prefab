@@ -174,7 +174,7 @@ MonoBehaviour:
   footstepMoveThreshold: 0.1
   ammoDropPrefab: {fileID: 2200432930401379321, guid: 4809031292e407849999fb8b93ff634c, type: 3}
   dropChance: 0.35
-  renderDistance: 45
+  renderDistance: 60
   renderCheckInterval: 0.5
 --- !u!82 &1998780077463750801
 AudioSource:
