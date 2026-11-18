@@ -70,7 +70,7 @@ public class PlayerController : MonoBehaviour
 
 
         bool isSprinting = Input.GetKey(KeyCode.LeftShift);
-        finalSpeed = isSprinting ? walkSpeed * 1.5f : walkSpeed;
+        finalSpeed = isSprinting ? walkSpeed * 1.2f : walkSpeed;
         // Checa se está encostando no chão
         if (controller.isGrounded && velocity.y < 0)
         {

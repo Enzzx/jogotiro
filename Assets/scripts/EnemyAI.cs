@@ -24,7 +24,7 @@ public class EnemyAI : MonoBehaviour
     public GameObject nightModel;
     [Tooltip("Modelo usado de dia (mesmo personagem do jogador, Ch23).")]
     public GameObject dayModel;
-    [Tooltip("A partir de quanto do dia (0 = noite, 1 = dia) o inimigo troca de modelo.")]
+    [Tooltip("A partir de quanto do dia (0 = noite, 1 = dia) o inimigo pode trocar de modelo. A troca so acontece de dia.")]
     [Range(0f, 1f)] public float dayModelThreshold = 0.5f;
 
     [Header("Danca")]
@@ -225,14 +225,18 @@ public class EnemyAI : MonoBehaviour
     {
         if (nightModel == null || dayModel == null) return;
 
-        bool wantNightModel = DayNightTransition.DayFactor < dayModelThreshold;
+        // O inimigo so troca de personagem durante o dia; de noite ele mantem o modelo atual.
+        bool isDay = DayNightTransition.DayFactor >= dayModelThreshold;
+        if (!isDay) return;
+
+        // Durante o dia o modelo correto e o diurno. Se ja esta nele, nao ha nada a fazer.
         bool usingNightModel = nightModel.activeSelf;
+        if (!usingNightModel) return;
 
         // Nunca troca enquanto o jogador estiver olhando para o inimigo.
-        if (wantNightModel == usingNightModel) return;
         if (canSeeMe) return;
 
-        SetNightModel(wantNightModel);
+        SetNightModel(false);
     }
 
     void SetNightModel(bool night)

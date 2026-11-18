@@ -11,7 +11,7 @@ public class EnemyNightShade : MonoBehaviour
 
     [Header("Silhueta do modelo noturno (Ch30)")]
     [Tooltip("Brilho do modelo Ch30. Perto de 0 ele fica preto, virando apenas uma silhueta.")]
-    [Range(0f, 0.2f)] public float silhouetteBrightness = 0.02f;
+    [Range(0f, 0.2f)] public float silhouetteBrightness = 0.2f;
     [Tooltip("Remove o brilho especular do modelo noturno para a silhueta ficar uniforme.")]
     public bool silhouetteMatte = true;
 
