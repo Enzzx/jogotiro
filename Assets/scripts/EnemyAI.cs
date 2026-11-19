@@ -16,7 +16,11 @@ public class EnemyAI : MonoBehaviour
     public float sightCheckInterval = 0.25f;
     [Tooltip("Tempo que o jogador precisa manter a mira em cima do inimigo para ele perceber.")]
     public float gazeTimeToAggro = 0.5f;
-    [Tooltip("Raio de perambulada enquanto o jogador ainda nao viu o inimigo.")]
+    [Tooltip("Raio em que o inimigo percebe o jogador sozinho (com linha de visao livre), mesmo sem ser olhado.")]
+    public float aggroRange = 45f;
+    [Tooltip("Tempo de espera depois de nascer antes de poder reagir ao jogador.")]
+    public float spawnGraceTime = 1.5f;
+    [Tooltip("Raio de perambulada enquanto o jogador ainda nao foi percebido.")]
     public float wanderRadius = 12f;
     public float wanderSpeed = 1.8f;
     public float chaseSpeed = 4.5f;
@@ -30,8 +34,8 @@ public class EnemyAI : MonoBehaviour
     [Range(0f, 1f)] public float dayModelThreshold = 0.5f;
 
     [Header("Danca")]
-    [Tooltip("Chance, ao ser visto pela primeira vez, de dancar em vez de perseguir.")]
-    [Range(0f, 1f)] public float danceChance = 0.15f;
+    [Tooltip("Chance (unica por inimigo) de dancar em vez de perseguir quando o jogador mira nele pela primeira vez.")]
+    [Range(0f, 1f)] public float danceChance = 0.05f;
     public float danceDurationMin = 4f;
     public float danceDurationMax = 7f;
     [Tooltip("Tempo apos a danca em que ele nao parte para cima do jogador.")]
@@ -61,6 +65,8 @@ public class EnemyAI : MonoBehaviour
 
     private bool isAggro = false;
     private bool isDancing = false;
+    private bool danceRolled = false;
+    private float spawnTime;
     private float nextSightCheck;
     private float aimTime = 0f;
     private float nextWanderTime;
@@ -93,6 +99,7 @@ public class EnemyAI : MonoBehaviour
 
         nextGroundCheck = Time.time + groundCheckInterval;
         AlignToGround();
+        spawnTime = Time.time;
 
         // Cada inimigo checa a visao em um instante diferente, para distribuir o custo.
         // Comeca com um pequeno atraso para o inimigo nao agredir no instante em que nasce.
@@ -119,6 +126,9 @@ public class EnemyAI : MonoBehaviour
     {
         if (isStopped || playerTransform == null) return;
 
+        // Enquanto o jogador esta no menu, nenhum inimigo reage.
+        if (MainMenu.IsOpen) return;
+
         // Mantem os pes no chao mesmo se a malha de navegacao estiver desalinhada.
         if (alignToGround && Time.time >= nextGroundCheck)
         {
@@ -143,16 +153,33 @@ public class EnemyAI : MonoBehaviour
             // Troca de modelo apenas quando o jogador NAO esta olhando.
             UpdateDayModel(canSeeMe);
 
-            // So fica agressivo se o jogador mantiver a mira nele por um instante.
-            // Antes, qualquer inimigo que aparecesse na tela ja partia para cima,
-            // o que fazia a horda inteira perseguir o jogador sem ele ter reagido.
+            // O inimigo reage quando o jogador mantem a mira nele por um instante
+            // OU quando ele mesmo consegue ver o jogador de perto (linha de visao livre).
             bool aimingAtMe = canSeeMe && PlayerIsAimingAtMe();
             aimTime = aimingAtMe ? aimTime + sightCheckInterval : 0f;
 
-            if (!isAggro && !isDancing && Time.time >= danceCooldownEnd && canSeeMe)
+            if (!isAggro && !isDancing && Time.time >= spawnTime + spawnGraceTime)
             {
-                if (Random.value < danceChance) StartDance();
-                else if (aimTime >= gazeTimeToAggro) BecomeAggro();
+                // Reage quando o jogador mira nele por um instante ou quando ele
+                // mesmo percebe o jogador de perto (com linha de visao livre).
+                bool shouldReact = aimTime >= gazeTimeToAggro || EnemySeesPlayer();
+                bool startedDancing = false;
+
+                // A danca e sorteada UMA unica vez por inimigo, no primeiro contato.
+                // Antes ela era sorteada a cada checagem de visao, o que fazia
+                // praticamente todo inimigo comecar dancando.
+                if (!danceRolled && shouldReact)
+                {
+                    danceRolled = true;
+                    if (Random.value < danceChance)
+                    {
+                        StartDance();
+                        startedDancing = true;
+                    }
+                }
+
+                if (!startedDancing && shouldReact)
+                    BecomeAggro();
             }
         }
 
@@ -305,6 +332,16 @@ public class EnemyAI : MonoBehaviour
         AlignToGround();
     }
 
+    public bool IsAggro
+    {
+        get { return isAggro; }
+    }
+
+    public bool IsDancing
+    {
+        get { return isDancing; }
+    }
+
     // Reposiciona o corpo do inimigo na altura do terreno usando o baseOffset do agente.
     void AlignToGround()
     {
@@ -338,6 +375,28 @@ public class EnemyAI : MonoBehaviour
         }
 
         nextWanderTime = Time.time + Random.Range(2.5f, 5f);
+    }
+
+    // Verdadeiro quando o inimigo consegue ver o jogador de perto, com a linha de visao
+    // livre (nao depende do jogador estar olhando para ele).
+    bool EnemySeesPlayer()
+    {
+        if (playerTransform == null) return false;
+
+        Vector3 origin = transform.position + Vector3.up * 1.2f;
+        Vector3 target = playerTransform.position + Vector3.up * 1.0f;
+        Vector3 delta = target - origin;
+        float distance = delta.magnitude;
+
+        if (distance > aggroRange || distance < 0.01f) return false;
+
+        if (Physics.Raycast(origin, delta / distance, out RaycastHit hit, distance,
+                ~0, QueryTriggerInteraction.Ignore))
+        {
+            return hit.transform == playerTransform || hit.transform.IsChildOf(playerTransform);
+        }
+
+        return true;
     }
 
     // O inimigo so "percebe" o jogador se estiver na tela, dentro do alcance e sem

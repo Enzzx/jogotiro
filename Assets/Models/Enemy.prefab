@@ -159,13 +159,15 @@ MonoBehaviour:
   sightRange: 70
   sightCheckInterval: 0.25
   gazeTimeToAggro: 0.5
+  aggroRange: 45
+  spawnGraceTime: 1.5
   wanderRadius: 12
   wanderSpeed: 1.8
   chaseSpeed: 4.5
   nightModel: {fileID: 8235314129717013069}
   dayModel: {fileID: 6381112467181001250}
   dayModelThreshold: 0.5
-  danceChance: 0.15
+  danceChance: 0.05
   danceDurationMin: 4
   danceDurationMax: 7
   danceCooldown: 8

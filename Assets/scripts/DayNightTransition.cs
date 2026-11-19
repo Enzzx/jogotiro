@@ -45,6 +45,10 @@ public class DayNightTransition : MonoBehaviour
 
     void Update()
     {
+        // O tempo so anda depois que o jogador clica em Jogar: o menu fica
+        // sempre na mesma noite inicial.
+        if (MainMenu.IsOpen) return;
+
         if (elapsedTime < transitionDuration)
         {
             elapsedTime += Time.deltaTime;

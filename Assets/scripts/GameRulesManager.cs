@@ -38,6 +38,9 @@ public class GameRulesManager : MonoBehaviour
 
     void Update()
     {
+        // No menu o tempo de sobrevivencia ainda nao comeca a contar.
+        if (MainMenu.IsOpen) return;
+
         if (gameEnded)
         {
             if (Input.GetKeyDown(KeyCode.R))
@@ -48,6 +51,15 @@ public class GameRulesManager : MonoBehaviour
         }
 
         survivalTime += Time.deltaTime;
+    }
+
+    // Mostra/esconde a HUD (mira, municao e mortes) durante o menu.
+    public void SetHudVisible(bool visible)
+    {
+        if (hudGroup != null) hudGroup.SetActive(visible);
+        if (crosshairObject != null) crosshairObject.SetActive(visible);
+        if (ammoText != null) ammoText.gameObject.SetActive(visible);
+        if (killsText != null) killsText.gameObject.SetActive(visible);
     }
 
     public void RegisterShot()
