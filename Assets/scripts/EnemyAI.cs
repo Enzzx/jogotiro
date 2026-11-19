@@ -14,6 +14,8 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Distancia maxima para o inimigo perceber o jogador olhando para ele.")]
     public float sightRange = 70f;
     public float sightCheckInterval = 0.25f;
+    [Tooltip("Tempo que o jogador precisa manter a mira em cima do inimigo para ele perceber.")]
+    public float gazeTimeToAggro = 0.5f;
     [Tooltip("Raio de perambulada enquanto o jogador ainda nao viu o inimigo.")]
     public float wanderRadius = 12f;
     public float wanderSpeed = 1.8f;
@@ -60,6 +62,7 @@ public class EnemyAI : MonoBehaviour
     private bool isAggro = false;
     private bool isDancing = false;
     private float nextSightCheck;
+    private float aimTime = 0f;
     private float nextWanderTime;
     private float nextRenderCheck;
     private float danceEndTime;
@@ -92,7 +95,8 @@ public class EnemyAI : MonoBehaviour
         AlignToGround();
 
         // Cada inimigo checa a visao em um instante diferente, para distribuir o custo.
-        nextSightCheck = Time.time + Random.Range(0f, sightCheckInterval);
+        // Comeca com um pequeno atraso para o inimigo nao agredir no instante em que nasce.
+        nextSightCheck = Time.time + 1f + Random.Range(0f, sightCheckInterval);
         nextWanderTime = 0f;
 
         // Escolhe o modelo correto ja no nascimento (se ninguem estiver vendo).
@@ -139,10 +143,16 @@ public class EnemyAI : MonoBehaviour
             // Troca de modelo apenas quando o jogador NAO esta olhando.
             UpdateDayModel(canSeeMe);
 
+            // So fica agressivo se o jogador mantiver a mira nele por um instante.
+            // Antes, qualquer inimigo que aparecesse na tela ja partia para cima,
+            // o que fazia a horda inteira perseguir o jogador sem ele ter reagido.
+            bool aimingAtMe = canSeeMe && PlayerIsAimingAtMe();
+            aimTime = aimingAtMe ? aimTime + sightCheckInterval : 0f;
+
             if (!isAggro && !isDancing && Time.time >= danceCooldownEnd && canSeeMe)
             {
                 if (Random.value < danceChance) StartDance();
-                else BecomeAggro();
+                else if (aimTime >= gazeTimeToAggro) BecomeAggro();
             }
         }
 
@@ -376,6 +386,27 @@ public class EnemyAI : MonoBehaviour
 
         return closestTransform != null &&
                (closestTransform == transform || closestTransform.IsChildOf(transform));
+    }
+
+    // Verdadeiro quando a mira do jogador esta em cima do inimigo e existe linha de visao.
+    // Usa o mesmo raio central da camera que o tiro (PlayerShoot) usa.
+    bool PlayerIsAimingAtMe()
+    {
+        if (playerCamera == null) playerCamera = Camera.main;
+        if (playerCamera == null) return false;
+
+        float maxRange = sightRange;
+        if (RenderSettings.fog)
+            maxRange = Mathf.Min(maxRange, RenderSettings.fogEndDistance);
+
+        Ray ray = new Ray(playerCamera.transform.position, playerCamera.transform.forward);
+        if (!Physics.Raycast(ray, out RaycastHit hit, maxRange, ~0, QueryTriggerInteraction.Ignore))
+            return false;
+
+        if (playerTransform != null && (hit.transform == playerTransform || hit.transform.IsChildOf(playerTransform)))
+            return false;
+
+        return hit.transform == transform || hit.transform.IsChildOf(transform);
     }
 
     void UpdateFootstepSound()

@@ -19,6 +19,9 @@ public class PlayerShoot : MonoBehaviour
     public AudioClip shootClip;           // Arraste o som de tiro
     public AudioClip reloadClip;          // Arraste o som de recarga
 
+    [Header("Animacao da Arma")]
+    public WeaponAnimator weaponAnimator; // Arraste o objeto Gun (com WeaponAnimator)
+
     private bool isReloading = false;
     private float nextTimeToFire = 0f;
 
@@ -55,6 +58,9 @@ public class PlayerShoot : MonoBehaviour
     {
         isReloading = true;
 
+        if (weaponAnimator != null)
+            weaponAnimator.PlayReload();
+
         if (weaponAudioSource != null && reloadClip != null)
             weaponAudioSource.PlayOneShot(reloadClip);
 
@@ -73,6 +79,9 @@ public class PlayerShoot : MonoBehaviour
     void Shoot()
     {
         currentAmmo--;
+
+        if (weaponAnimator != null)
+            weaponAnimator.PlayShoot();
 
         if (weaponAudioSource != null && shootClip != null)
             weaponAudioSource.PlayOneShot(shootClip);

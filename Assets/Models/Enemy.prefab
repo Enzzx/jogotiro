@@ -158,6 +158,7 @@ MonoBehaviour:
   catchDistance: 1.6
   sightRange: 70
   sightCheckInterval: 0.25
+  gazeTimeToAggro: 0.5
   wanderRadius: 12
   wanderSpeed: 1.8
   chaseSpeed: 4.5
