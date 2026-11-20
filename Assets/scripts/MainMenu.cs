@@ -1,12 +1,11 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
-using TMPro;
 
 // Menu inicial do jogo.
 // A tela e a propria visao do personagem, mas com a camera mais baixa (sentado
 // no chao) e a arma escondida. A fogueira fica na frente, com o botao Jogar a
-// esquerda e o botao Creditos a direita.
+// esquerda e o botao Sair a direita.
 // Ao clicar em Jogar, a camera e a arma sobem e o controle do player e liberado.
 public class MainMenu : MonoBehaviour
 {
@@ -17,36 +16,6 @@ public class MainMenu : MonoBehaviour
     [Header("Painel do Menu")]
     public GameObject menuRoot;
     public CanvasGroup menuGroup;
-
-    [Header("Creditos")]
-    public GameObject creditsRoot;
-    public CanvasGroup creditsGroup;
-    public RectTransform creditsViewport;
-    public RectTransform creditsContent;
-    public TMP_Text creditsLabel;
-    public AudioSource creditsMusic;
-    [Tooltip("Texto dos créditos. Pode editar à vontade neste campo.")]
-    [TextArea(10, 40)]
-    public string creditsText =
-        "JOGOTIRO\n\n" +
-        "Uma noite na floresta.\n\n\n" +
-        "--- EQUIPE ---\n\n" +
-        "Direção e Programação\n" +
-        "Seu Nome\n\n" +
-        "Arte e Modelagem\n" +
-        "Seu Nome\n\n" +
-        "Trilha Sonora\n" +
-        "Adicione um AudioClip no AudioSource\n" +
-        "do objeto MenuManager\n\n\n" +
-        "--- AGRADECIMENTOS ---\n\n" +
-        "A todos que sobreviveram\n" +
-        "até o amanhecer.\n\n\n\n" +
-        "Obrigado por jogar.";
-    [Tooltip("Rolagem automática dos créditos, em pixels por segundo. 0 = só manual (roda do mouse ou setas).")]
-    public float creditsScrollSpeed = 30f;
-    [Tooltip("Ao chegar no fim, o texto volta para baixo e recomeça.")]
-    public bool creditsLoop = true;
-    public float creditsFadeDuration = 0.4f;
 
     [Header("Camera Sentada")]
     public Transform cameraTransform;
@@ -70,13 +39,14 @@ public class MainMenu : MonoBehaviour
     private Vector3 standingGunPosition;
     private readonly Quaternion standingCameraRotation = Quaternion.identity;
     private bool starting;
-    private bool creditsOpen;
-    private float creditsOffset;
-    private Coroutine creditsFade;
 
     void Awake()
     {
         IsOpen = true;
+
+        // Garante que o jogo volta a rodar normalmente caso venha de uma tela
+        // de vitoria/derrota (onde o tempo fica pausado).
+        Time.timeScale = 1f;
 
         if (cameraTransform == null)
         {
@@ -100,8 +70,6 @@ public class MainMenu : MonoBehaviour
         if (playerShoot != null) playerShoot.enabled = false;
         if (playerAnimation != null) playerAnimation.enabled = false;
         if (hordeSpawner != null) hordeSpawner.enabled = false;
-
-        if (creditsRoot != null) creditsRoot.SetActive(false);
     }
 
     void Start()
@@ -109,8 +77,6 @@ public class MainMenu : MonoBehaviour
         EnterMenuPose();
         SetGameplayHud(false);
         ShowCursor(true);
-
-        if (creditsLabel != null) creditsLabel.text = creditsText;
 
         if (menuRoot != null) menuRoot.SetActive(true);
         if (menuGroup != null)
@@ -120,49 +86,8 @@ public class MainMenu : MonoBehaviour
             menuGroup.blocksRaycasts = true;
         }
 
-        creditsOpen = false;
+        SetupQuitButton();
         starting = false;
-    }
-
-    void Update()
-    {
-        if (!creditsOpen) return;
-
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            CloseCredits();
-            return;
-        }
-
-        if (creditsContent == null || creditsViewport == null) return;
-
-        float viewportHeight = creditsViewport.rect.height;
-        float contentHeight = creditsContent.rect.height;
-
-        // Rolagem automatica.
-        if (creditsScrollSpeed != 0f)
-            creditsOffset += creditsScrollSpeed * Time.unscaledDeltaTime;
-
-        // Rolagem manual: roda do mouse e setas.
-        float wheel = Input.mouseScrollDelta.y;
-        if (Mathf.Abs(wheel) > 0.01f)
-            creditsOffset += wheel * 90f;
-        if (Input.GetKey(KeyCode.DownArrow))
-            creditsOffset += 600f * Time.unscaledDeltaTime;
-        if (Input.GetKey(KeyCode.UpArrow))
-            creditsOffset -= 600f * Time.unscaledDeltaTime;
-
-        if (creditsOffset > contentHeight)
-        {
-            if (creditsLoop)
-                creditsOffset = -viewportHeight;
-            else
-                creditsOffset = contentHeight;
-        }
-        if (creditsOffset < -viewportHeight)
-            creditsOffset = -viewportHeight;
-
-        ApplyCreditsPosition();
     }
 
     // ---- Menu -> Jogo ----
@@ -229,95 +154,30 @@ public class MainMenu : MonoBehaviour
         ShowCursor(false);
     }
 
-    // ---- Creditos ----
+    // ---- Sair ----
 
-    public void OpenCredits()
+    // Liga o botao Sair do menu ao fechamento do jogo.
+    void SetupQuitButton()
     {
-        if (creditsOpen || starting) return;
-        creditsOpen = true;
+        if (menuRoot == null) return;
 
-        if (menuRoot != null) menuRoot.SetActive(false);
-        if (creditsRoot != null) creditsRoot.SetActive(true);
+        Transform quitTransform = menuRoot.transform.Find("QuitButton");
+        if (quitTransform == null) return;
 
-        if (creditsLabel != null) creditsLabel.text = creditsText;
-        ResetCreditsScroll();
+        Button quitButton = quitTransform.GetComponent<Button>();
+        if (quitButton == null) return;
 
-        if (creditsGroup != null)
-        {
-            creditsGroup.alpha = 0f;
-            if (creditsFade != null) StopCoroutine(creditsFade);
-            creditsFade = StartCoroutine(FadeCredits(1f));
-        }
-
-        // A trilha so toca nos creditos (e para quando volta ao menu).
-        if (creditsMusic != null && creditsMusic.clip != null)
-        {
-            creditsMusic.loop = true;
-            creditsMusic.Play();
-        }
-
-        ShowCursor(true);
+        quitButton.onClick.RemoveAllListeners();
+        quitButton.onClick.AddListener(QuitGame);
     }
 
-    public void CloseCredits()
+    public void QuitGame()
     {
-        if (!creditsOpen) return;
-        creditsOpen = false;
-
-        if (creditsFade != null)
-        {
-            StopCoroutine(creditsFade);
-            creditsFade = null;
-        }
-
-        if (creditsMusic != null) creditsMusic.Stop();
-        if (creditsRoot != null) creditsRoot.SetActive(false);
-
-        if (menuRoot != null) menuRoot.SetActive(true);
-        if (menuGroup != null)
-        {
-            menuGroup.alpha = 1f;
-            menuGroup.interactable = true;
-            menuGroup.blocksRaycasts = true;
-        }
-
-        ShowCursor(true);
-    }
-
-    IEnumerator FadeCredits(float target)
-    {
-        float from = creditsGroup.alpha;
-        float elapsed = 0f;
-        while (elapsed < creditsFadeDuration)
-        {
-            elapsed += Time.unscaledDeltaTime;
-            creditsGroup.alpha = Mathf.Lerp(from, target, Mathf.Clamp01(elapsed / creditsFadeDuration));
-            yield return null;
-        }
-        creditsGroup.alpha = target;
-        creditsFade = null;
-    }
-
-    // Ajusta o texto para a largura da tela e comeca com ele abaixo da area
-    // visivel: assim os creditos sobem pela tela como no cinema.
-    void ResetCreditsScroll()
-    {
-        if (creditsContent == null || creditsViewport == null) return;
-
-        Canvas.ForceUpdateCanvases();
-
-        float viewportHeight = creditsViewport.rect.height;
-        float textHeight = creditsLabel != null ? creditsLabel.preferredHeight + 40f : 0f;
-
-        creditsContent.sizeDelta = new Vector2(0f, textHeight);
-        creditsOffset = -viewportHeight;
-        ApplyCreditsPosition();
-    }
-
-    void ApplyCreditsPosition()
-    {
-        if (creditsContent == null) return;
-        creditsContent.anchoredPosition = new Vector2(0f, creditsOffset);
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
     }
 
     // ---- Auxiliares ----

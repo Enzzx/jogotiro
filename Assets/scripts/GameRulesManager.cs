@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 using TMPro; // Necessario para controlar os textos TextMeshPro
 
 public class GameRulesManager : MonoBehaviour
@@ -9,7 +10,12 @@ public class GameRulesManager : MonoBehaviour
     [Header("Configuracao da Vitoria (Tregua)")]
     public float minSurvivalTimeForEnding = 30f;
     public GameObject gunObject;
-    public GameObject endingPanel;
+
+    [Header("Telas de Fim")]
+    public GameObject losePanel;       // Tela preta: Voce perdeu
+    public TMP_Text loseDeathsText;    // Contador de mortes mostrado na tela preta
+    public GameObject winPanel;        // Tela branca: Voce ganhou
+    public TMP_Text winTimeText;       // Tempo sobrevivido mostrado na tela branca
 
     [Header("Interface (HUD)")]
     public GameObject hudGroup;        // Opcional: pode arrastar um objeto pai com mira e textos
@@ -30,8 +36,13 @@ public class GameRulesManager : MonoBehaviour
 
     void Start()
     {
-        if (endingPanel != null)
-            endingPanel.SetActive(false);
+        if (losePanel != null)
+            losePanel.SetActive(false);
+        if (winPanel != null)
+            winPanel.SetActive(false);
+
+        SetupBackButton(losePanel);
+        SetupBackButton(winPanel);
 
         UpdateKillsUI();
     }
@@ -41,14 +52,7 @@ public class GameRulesManager : MonoBehaviour
         // No menu o tempo de sobrevivencia ainda nao comeca a contar.
         if (MainMenu.IsOpen) return;
 
-        if (gameEnded)
-        {
-            if (Input.GetKeyDown(KeyCode.R))
-            {
-                RestartGame();
-            }
-            return;
-        }
+        if (gameEnded) return;
 
         survivalTime += Time.deltaTime;
     }
@@ -94,21 +98,37 @@ public class GameRulesManager : MonoBehaviour
     {
         if (gameEnded) return;
 
-        if (killsCount > 0)
-        {
-            RestartGame();
-        }
-        else if (survivalTime >= minSurvivalTimeForEnding)
-        {
-            TriggerTrueEnding();
-        }
+        // Vitoria: foi pego sem matar ninguem e sobreviveu o tempo minimo.
+        if (killsCount == 0 && survivalTime >= minSurvivalTimeForEnding)
+            ShowWinScreen();
         else
-        {
-            RestartGame();
-        }
+            ShowLoseScreen();
     }
 
-    void TriggerTrueEnding()
+    void ShowLoseScreen()
+    {
+        EndGame();
+
+        if (loseDeathsText != null)
+            loseDeathsText.text = "Mortes: " + killsCount;
+
+        if (losePanel != null)
+            losePanel.SetActive(true);
+    }
+
+    void ShowWinScreen()
+    {
+        EndGame();
+
+        if (winTimeText != null)
+            winTimeText.text = "Tempo sobrevivido: " + FormatTime(survivalTime);
+
+        if (winPanel != null)
+            winPanel.SetActive(true);
+    }
+
+    // Congela o jogo e prepara a tela de fim (vitoria ou derrota).
+    void EndGame()
     {
         gameEnded = true;
 
@@ -116,9 +136,24 @@ public class GameRulesManager : MonoBehaviour
         if (crosshairObject != null) crosshairObject.SetActive(false);
         if (killsText != null) killsText.gameObject.SetActive(false);
         if (ammoText != null) ammoText.gameObject.SetActive(false);
-        if (endingPanel != null) endingPanel.SetActive(true);
+        if (hudGroup != null) hudGroup.SetActive(false);
 
-        EnemyAI[] enemies = FindObjectsByType<EnemyAI>(FindObjectsSortMode.None);
+        // Trava os controles do jogador (e os passos) na tela de fim.
+        PlayerController playerController = FindAnyObjectByType<PlayerController>();
+        if (playerController != null)
+        {
+            if (playerController.footstepAudioSource != null)
+                playerController.footstepAudioSource.Stop();
+            playerController.enabled = false;
+        }
+
+        PlayerShoot playerShoot = FindAnyObjectByType<PlayerShoot>();
+        if (playerShoot != null) playerShoot.enabled = false;
+
+        PlayerAnimation playerAnimation = FindAnyObjectByType<PlayerAnimation>();
+        if (playerAnimation != null) playerAnimation.enabled = false;
+
+        EnemyAI[] enemies = FindObjectsByType<EnemyAI>(FindObjectsInactive.Exclude);
         foreach (EnemyAI enemy in enemies)
         {
             enemy.StopChasing();
@@ -126,14 +161,42 @@ public class GameRulesManager : MonoBehaviour
 
         HordeSpawner spawner = GetComponent<HordeSpawner>();
         if (spawner != null)
+        {
             spawner.StopAllCoroutines();
+            spawner.enabled = false;
+        }
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        // Pausa o mundo, mas deixa os botoes da interface funcionando.
+        Time.timeScale = 0f;
     }
 
-    public void RestartGame()
+    // Liga o botao "Voltar ao Menu" da tela de fim.
+    void SetupBackButton(GameObject panel)
     {
+        if (panel == null) return;
+
+        Transform backTransform = panel.transform.Find("BackButton");
+        if (backTransform == null) return;
+
+        Button backButton = backTransform.GetComponent<Button>();
+        if (backButton == null) return;
+
+        backButton.onClick.RemoveAllListeners();
+        backButton.onClick.AddListener(ReturnToMenu);
+    }
+
+    public void ReturnToMenu()
+    {
+        Time.timeScale = 1f;
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+    }
+
+    static string FormatTime(float seconds)
+    {
+        int totalSeconds = Mathf.Max(0, Mathf.FloorToInt(seconds));
+        return string.Format("{0:00}:{1:00}", totalSeconds / 60, totalSeconds % 60);
     }
 }
