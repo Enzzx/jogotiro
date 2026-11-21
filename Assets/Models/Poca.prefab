@@ -106,8 +106,15 @@ MonoBehaviour:
   reflectionLayers:
     serializedVersion: 2
     m_Bits: 71
-  textureHeight: 540
-  maxRenderDistance: 45
+  textureHeight: 432
+  maxRenderDistance: 30
+  updateInterval: 2
+  cullOffscreen: 1
+  staticReflection: 1
+  refreshDistance: 6
+  refreshAngle: 20
+  refreshInterval: 8
+  captureDelay: 0.2
   selfReflection: 1
   selfReflectionDistance: 4.5
   selfReflectionStrength: 0.95

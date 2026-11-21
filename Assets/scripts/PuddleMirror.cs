@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 // Poca que funciona como um espelho no chao, compativel com URP.
 // - Reflexo do mundo: camera espelhada + RenderTexture.
@@ -17,9 +18,25 @@ public class PuddleMirror : MonoBehaviour
     [Tooltip("Camadas que aparecem no reflexo. Por padrao tudo, menos Water, UI, PlayerMirror e Weapon.")]
     public LayerMask reflectionLayers = ~((1 << 4) | (1 << 5) | (1 << 7) | (1 << 8));
     [Tooltip("Altura maxima da textura de reflexo. Menor = mais barato.")]
-    public int textureHeight = 540;
+    public int textureHeight = 432;
     [Tooltip("Distancia maxima da camera para o reflexo continuar sendo atualizado.")]
-    public float maxRenderDistance = 45f;
+    public float maxRenderDistance = 30f;
+    [Tooltip("Atualiza o reflexo a cada N frames (usado apenas no modo dinamico).")]
+    [Range(1, 6)] public int updateInterval = 2;
+    [Tooltip("Nao renderiza o reflexo quando a poca esta fora da tela.")]
+    public bool cullOffscreen = true;
+
+    [Header("Reflexo Estatico")]
+    [Tooltip("Renderiza a paisagem uma vez e reutiliza a textura. O reflexo do player continua dinamico.")]
+    public bool staticReflection = true;
+    [Tooltip("Recaptura quando a camera se afastar desta distancia (metros) do ponto capturado. 0 = nunca.")]
+    public float refreshDistance = 6f;
+    [Tooltip("Recaptura quando a camera girar mais que estes graus. 0 = nunca.")]
+    public float refreshAngle = 20f;
+    [Tooltip("Recaptura a cada N segundos, para acompanhar mudancas de luz/objetos moveis. 0 = nunca.")]
+    public float refreshInterval = 8f;
+    [Tooltip("Espera antes da primeira captura, para a cena terminar de carregar.")]
+    public float captureDelay = 0.2f;
 
     [Header("Reflexo do Player")]
     [Tooltip("Mostra o proprio personagem refletido na poca.")]
@@ -55,6 +72,19 @@ public class PuddleMirror : MonoBehaviour
     private bool selfReady;
     private Mesh generatedMesh;
 
+    // Controle de atualizacao do reflexo.
+    private static int nextFrameOffset;
+    private int frameOffset;
+    private bool wasVisible;
+    private readonly Plane[] frustumPlanes = new Plane[6];
+
+    // Reflexo estatico: guarda quando/quem gerou a textura atual.
+    private bool hasStaticCapture;
+    private float visibleSince;
+    private float lastCaptureTime;
+    private Vector3 lastCapturePosition;
+    private Quaternion lastCaptureRotation;
+
     private static readonly int ReflectionTexId = Shader.PropertyToID("_ReflectionTex");
     private static readonly int SelfTexId = Shader.PropertyToID("_SelfTex");
 
@@ -66,6 +96,9 @@ public class PuddleMirror : MonoBehaviour
 
         if (snapToTerrain) SnapToGround();
         ConformMeshToTerrain();
+
+        // Espalha as atualizacoes entre as pocas: cada uma cai em um frame diferente.
+        frameOffset = nextFrameOffset++ % Mathf.Max(1, updateInterval);
 
         // A copia do player fica na layer PlayerMirror, que a camera principal ignora.
         if (mainCamera != null)
@@ -82,8 +115,76 @@ public class PuddleMirror : MonoBehaviour
         if (mainCamera == null || reflectionCamera == null || reflectionTexture == null) return;
 
         // Nao gasta renderizacao quando o jogador nem esta perto.
-        if (Vector3.Distance(mainCamera.transform.position, transform.position) > maxRenderDistance) return;
+        if (Vector3.Distance(mainCamera.transform.position, transform.position) > maxRenderDistance)
+        {
+            wasVisible = false;
+            HideSelfCopy();
+            return;
+        }
 
+        // Poca fora da tela nao precisa de reflexo neste frame.
+        bool visible = !cullOffscreen || IsPuddleVisible();
+        if (!visible)
+        {
+            wasVisible = false;
+            HideSelfCopy();
+            return;
+        }
+
+        if (!wasVisible) visibleSince = Time.time;
+        wasVisible = true;
+
+        if (staticReflection)
+        {
+            // A paisagem e capturada uma vez e reaproveitada. So recaptura quando
+            // a camera anda/gira o bastante ou quando o tempo passa.
+            if (ShouldCaptureStatic())
+            {
+                CaptureReflection();
+                hasStaticCapture = true;
+                lastCaptureTime = Time.time;
+                lastCapturePosition = mainCamera.transform.position;
+                lastCaptureRotation = mainCamera.transform.rotation;
+            }
+        }
+        else
+        {
+            // Modo dinamico: atualiza em intervalos (alternados entre as pocas)
+            // para nao renderizar a cena inteira varias vezes no mesmo frame.
+            int interval = Mathf.Max(1, updateInterval);
+            if ((Time.frameCount + frameOffset) % interval != 0)
+            {
+                RenderSelfReflection();
+                return;
+            }
+
+            CaptureReflection();
+        }
+
+        RenderSelfReflection();
+    }
+
+    bool ShouldCaptureStatic()
+    {
+        if (!hasStaticCapture) return Time.time - visibleSince >= captureDelay;
+
+        if (refreshDistance > 0f
+            && Vector3.Distance(mainCamera.transform.position, lastCapturePosition) >= refreshDistance)
+            return true;
+
+        if (refreshAngle > 0f
+            && Quaternion.Angle(mainCamera.transform.rotation, lastCaptureRotation) >= refreshAngle)
+            return true;
+
+        if (refreshInterval > 0f && Time.time - lastCaptureTime >= refreshInterval)
+            return true;
+
+        return false;
+    }
+
+    // Renderiza a paisagem espelhada dentro da RenderTexture da poca.
+    void CaptureReflection()
+    {
         Vector3 normal = PlaneNormal;
         Vector4 plane = new Vector4(normal.x, normal.y, normal.z, -Vector3.Dot(normal, transform.position));
         Matrix4x4 reflectionMatrix = ReflectionMatrix(plane);
@@ -104,8 +205,20 @@ public class PuddleMirror : MonoBehaviour
         GL.invertCulling = true;
         reflectionCamera.Render();
         GL.invertCulling = invertCulling;
+    }
 
-        RenderSelfReflection();
+    // Testa se a poca esta dentro do frustum da camera principal.
+    bool IsPuddleVisible()
+    {
+        if (mainCamera == null || puddleRenderer == null) return true;
+        GeometryUtility.CalculateFrustumPlanes(mainCamera, frustumPlanes);
+        return GeometryUtility.TestPlanesAABB(frustumPlanes, puddleRenderer.bounds);
+    }
+
+    void HideSelfCopy()
+    {
+        if (selfCopy != null && selfCopy.gameObject.activeSelf)
+            selfCopy.gameObject.SetActive(false);
     }
 
     void OnDestroy()
@@ -152,6 +265,16 @@ public class PuddleMirror : MonoBehaviour
         reflectionCamera.farClipPlane = 200f;
         reflectionCamera.depth = -50f;
         reflectionCamera.cullingMask = reflectionLayers;
+
+        // O reflexo nao precisa de sombras nem de pos-processamento: o shader
+        // ja escurece/ondula a imagem. Desligar isso evita refazer o shadow map
+        // e o SSAO/bloom para a camera de reflexo.
+        UniversalAdditionalCameraData reflectionData = reflectionCamera.GetUniversalAdditionalCameraData();
+        reflectionData.renderShadows = false;
+        reflectionData.renderPostProcessing = false;
+        reflectionData.requiresDepthOption = CameraOverrideOption.Off;
+        reflectionData.requiresColorOption = CameraOverrideOption.Off;
+        reflectionData.volumeLayerMask = 0;
 
         reflectionTexture = CreateRenderTexture(name + "_ReflectionTex", RenderTextureFormat.Default);
         reflectionCamera.targetTexture = reflectionTexture;
@@ -237,6 +360,13 @@ public class PuddleMirror : MonoBehaviour
         selfCamera.useOcclusionCulling = false;
         selfCamera.depth = -50f;
         selfCamera.cullingMask = 1 << MirrorLayer;
+
+        UniversalAdditionalCameraData selfData = selfCamera.GetUniversalAdditionalCameraData();
+        selfData.renderShadows = false;
+        selfData.renderPostProcessing = false;
+        selfData.requiresDepthOption = CameraOverrideOption.Off;
+        selfData.requiresColorOption = CameraOverrideOption.Off;
+        selfData.volumeLayerMask = 0;
 
         selfTexture = CreateRenderTexture(name + "_SelfTex", RenderTextureFormat.ARGB32);
         selfCamera.targetTexture = selfTexture;
